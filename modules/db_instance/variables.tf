@@ -9,6 +9,12 @@ variable "identifier" {
   type        = string
 }
 
+variable "use_identifier_prefix" {
+  description = "Determines whether to use `identifier` as is or create a unique identifier beginning with `identifier` as the specified prefix"
+  type        = bool
+  default     = false
+}
+
 variable "allocated_storage" {
   description = "The allocated storage in gigabytes"
   type        = string
@@ -16,8 +22,14 @@ variable "allocated_storage" {
 }
 
 variable "storage_type" {
-  description = "One of 'standard' (magnetic), 'gp2' (general purpose SSD), or 'io1' (provisioned IOPS SSD). The default is 'io1' if iops is specified, 'standard' if not. Note that this behaviour is different from the AWS web console, where the default is 'gp2'."
+  description = "One of 'standard' (magnetic), 'gp2' (general purpose SSD), 'gp3' (new generation of general purpose SSD), or 'io1' (provisioned IOPS SSD). The default is 'io1' if iops is specified, 'gp2' if not. If you specify 'io1' or 'gp3' , you must also include a value for the 'iops' parameter"
   type        = string
+  default     = null
+}
+
+variable "storage_throughput" {
+  description = "Storage throughput value for the DB instance. This setting applies only to the `gp3` storage type. See `notes` for limitations regarding this variable for `gp3`"
+  type        = number
   default     = null
 }
 
@@ -166,9 +178,9 @@ variable "multi_az" {
 }
 
 variable "iops" {
-  description = "The amount of provisioned IOPS. Setting this implies a storage_type of 'io1'"
+  description = "The amount of provisioned IOPS. Setting this implies a storage_type of 'io1' or `gp3`. See `notes` for limitations regarding this variable for `gp3`"
   type        = number
-  default     = 0
+  default     = null
 }
 
 variable "publicly_accessible" {
@@ -193,6 +205,12 @@ variable "monitoring_role_name" {
   description = "Name of the IAM role which will be created when create_monitoring_role is enabled."
   type        = string
   default     = "rds-monitoring-role"
+}
+
+variable "monitoring_role_use_name_prefix" {
+  description = "Determines whether to use `monitoring_role_name` as is or create a unique identifier beginning with `monitoring_role_name` as the specified prefix"
+  type        = bool
+  default     = false
 }
 
 variable "monitoring_role_description" {
@@ -331,6 +349,12 @@ variable "s3_import" {
 variable "restore_to_point_in_time" {
   description = "Restore to a point in time (MySQL is NOT supported)"
   type        = map(string)
+  default     = null
+}
+
+variable "network_type" {
+  description = "The type of network stack"
+  type        = string
   default     = null
 }
 

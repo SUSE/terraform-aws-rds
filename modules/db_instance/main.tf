@@ -3,12 +3,17 @@ locals {
 
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.final_snapshot_identifier_prefix}-${var.identifier}-${try(random_id.snapshot_identifier[0].hex, "")}"
 
-  # For replica instances or instances restored from snapshot, the metadata is already baked into the source
-  metadata_already_exists = var.snapshot_identifier != null || var.replicate_source_db != null
-  username                = local.metadata_already_exists ? null : var.username
-  password                = local.metadata_already_exists ? null : var.password
-  engine                  = local.metadata_already_exists ? null : var.engine
-  engine_version          = var.replicate_source_db != null ? null : var.engine_version
+  identifier        = var.use_identifier_prefix ? null : var.identifier
+  identifier_prefix = var.use_identifier_prefix ? "${var.identifier}-" : null
+
+  monitoring_role_name        = var.monitoring_role_use_name_prefix ? null : var.monitoring_role_name
+  monitoring_role_name_prefix = var.monitoring_role_use_name_prefix ? "${var.monitoring_role_name}-" : null
+
+  # Replicas will use source metadata
+  username       = var.replicate_source_db != null ? null : var.username
+  password       = var.replicate_source_db != null ? null : var.password
+  engine         = var.replicate_source_db != null ? null : var.engine
+  engine_version = var.replicate_source_db != null ? null : var.engine_version
 }
 
 # Ref. https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#genref-aws-service-namespaces
@@ -27,7 +32,8 @@ resource "random_id" "snapshot_identifier" {
 resource "aws_db_instance" "this" {
   count = var.create ? 1 : 0
 
-  identifier = var.identifier
+  identifier        = local.identifier
+  identifier_prefix = local.identifier_prefix
 
   engine            = local.engine
   engine_version    = local.engine_version
@@ -50,10 +56,12 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name   = var.db_subnet_group_name
   parameter_group_name   = var.parameter_group_name
   option_group_name      = var.option_group_name
+  network_type           = var.network_type
 
   availability_zone   = var.availability_zone
   multi_az            = var.multi_az
   iops                = var.iops
+  storage_throughput  = var.storage_throughput
   publicly_accessible = var.publicly_accessible
   ca_cert_identifier  = var.ca_cert_identifier
 
@@ -90,10 +98,11 @@ resource "aws_db_instance" "this" {
     for_each = var.restore_to_point_in_time != null ? [var.restore_to_point_in_time] : []
 
     content {
-      restore_time                  = lookup(restore_to_point_in_time.value, "restore_time", null)
-      source_db_instance_identifier = lookup(restore_to_point_in_time.value, "source_db_instance_identifier", null)
-      source_dbi_resource_id        = lookup(restore_to_point_in_time.value, "source_dbi_resource_id", null)
-      use_latest_restorable_time    = lookup(restore_to_point_in_time.value, "use_latest_restorable_time", null)
+      restore_time                             = lookup(restore_to_point_in_time.value, "restore_time", null)
+      source_db_instance_automated_backups_arn = lookup(restore_to_point_in_time.value, "source_db_instance_automated_backups_arn", null)
+      source_db_instance_identifier            = lookup(restore_to_point_in_time.value, "source_db_instance_identifier", null)
+      source_dbi_resource_id                   = lookup(restore_to_point_in_time.value, "source_dbi_resource_id", null)
+      use_latest_restorable_time               = lookup(restore_to_point_in_time.value, "use_latest_restorable_time", null)
     }
   }
 
@@ -111,16 +120,12 @@ resource "aws_db_instance" "this" {
 
   tags = var.tags
 
+  depends_on = [aws_cloudwatch_log_group.this]
+
   timeouts {
     create = lookup(var.timeouts, "create", null)
     delete = lookup(var.timeouts, "delete", null)
     update = lookup(var.timeouts, "update", null)
-  }
-
-  lifecycle {
-    ignore_changes = [
-      latest_restorable_time
-    ]
   }
 }
 
@@ -158,7 +163,8 @@ data "aws_iam_policy_document" "enhanced_monitoring" {
 resource "aws_iam_role" "enhanced_monitoring" {
   count = var.create_monitoring_role ? 1 : 0
 
-  name               = var.monitoring_role_name
+  name               = local.monitoring_role_name
+  name_prefix        = local.monitoring_role_name_prefix
   assume_role_policy = data.aws_iam_policy_document.enhanced_monitoring.json
   description        = var.monitoring_role_description
 

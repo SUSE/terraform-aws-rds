@@ -28,6 +28,16 @@ output "db_instance_endpoint" {
   value       = module.db_instance.db_instance_endpoint
 }
 
+output "db_instance_engine" {
+  description = "The database engine"
+  value       = module.db_instance.db_instance_engine
+}
+
+output "db_instance_engine_version_actual" {
+  description = "The running version of the database"
+  value       = module.db_instance.db_instance_engine_version_actual
+}
+
 output "db_instance_hosted_zone_id" {
   description = "The canonical hosted zone ID of the DB instance (to be used in a Route 53 Alias record)"
   value       = module.db_instance.db_instance_hosted_zone_id
@@ -61,7 +71,7 @@ output "db_instance_username" {
 
 output "db_instance_password" {
   description = "The database password (this password may be old, because Terraform doesn't track it after initial creation)"
-  value       = local.master_password
+  value       = local.password
   sensitive   = true
 }
 
@@ -114,12 +124,6 @@ output "db_option_group_id" {
 output "db_option_group_arn" {
   description = "The ARN of the db option group"
   value       = module.db_option_group.db_option_group_arn
-}
-
-output "db_master_password" {
-  description = "The master password"
-  value       = module.db_instance.db_instance_master_password
-  sensitive   = true
 }
 
 ################################################################################

@@ -1,6 +1,10 @@
 locals {
-  create_random_password = var.create_db_instance && var.create_random_password && var.snapshot_identifier == null
-  master_password        = try(random_password.master_password[0].result, var.password)
+  create_db_subnet_group    = var.create_db_subnet_group && var.putin_khuylo
+  create_db_parameter_group = var.create_db_parameter_group && var.putin_khuylo
+  create_db_instance        = var.create_db_instance && var.putin_khuylo
+
+  create_random_password = local.create_db_instance && var.create_random_password
+  password               = local.create_random_password ? random_password.master_password[0].result : var.password
 
   db_subnet_group_name    = var.create_db_subnet_group ? module.db_subnet_group.db_subnet_group_id : var.db_subnet_group_name
   parameter_group_name_id = var.create_db_parameter_group ? module.db_parameter_group.db_parameter_group_id : var.parameter_group_name
@@ -10,7 +14,6 @@ locals {
 }
 
 resource "random_password" "master_password" {
-  # We don't need to create a random password for instances that are replicas or restored from a snapshot
   count = local.create_random_password ? 1 : 0
 
   length  = var.random_password_length
@@ -20,7 +23,7 @@ resource "random_password" "master_password" {
 module "db_subnet_group" {
   source = "./modules/db_subnet_group"
 
-  create = var.create_db_subnet_group
+  create = local.create_db_subnet_group
 
   name            = coalesce(var.db_subnet_group_name, var.identifier)
   use_name_prefix = var.db_subnet_group_use_name_prefix
@@ -33,7 +36,7 @@ module "db_subnet_group" {
 module "db_parameter_group" {
   source = "./modules/db_parameter_group"
 
-  create = var.create_db_parameter_group
+  create = local.create_db_parameter_group
 
   name            = coalesce(var.parameter_group_name, var.identifier)
   use_name_prefix = var.parameter_group_use_name_prefix
@@ -66,8 +69,9 @@ module "db_option_group" {
 module "db_instance" {
   source = "./modules/db_instance"
 
-  create     = var.create_db_instance
-  identifier = var.identifier
+  create                = local.create_db_instance
+  identifier            = var.identifier
+  use_identifier_prefix = var.instance_use_identifier_prefix
 
   engine            = var.engine
   engine_version    = var.engine_version
@@ -80,7 +84,7 @@ module "db_instance" {
 
   db_name                             = var.db_name
   username                            = var.username
-  password                            = local.master_password
+  password                            = local.password
   port                                = var.port
   domain                              = var.domain
   domain_iam_role_name                = var.domain_iam_role_name
@@ -90,10 +94,12 @@ module "db_instance" {
   db_subnet_group_name   = local.db_subnet_group_name
   parameter_group_name   = local.parameter_group_name_id
   option_group_name      = local.option_group
+  network_type           = var.network_type
 
   availability_zone   = var.availability_zone
   multi_az            = var.multi_az
   iops                = var.iops
+  storage_throughput  = var.storage_throughput
   publicly_accessible = var.publicly_accessible
   ca_cert_identifier  = var.ca_cert_identifier
 
@@ -111,16 +117,17 @@ module "db_instance" {
   performance_insights_retention_period = var.performance_insights_retention_period
   performance_insights_kms_key_id       = var.performance_insights_enabled ? var.performance_insights_kms_key_id : null
 
-  replicate_source_db         = var.replicate_source_db
-  replica_mode                = var.replica_mode
-  backup_retention_period     = var.backup_retention_period
-  backup_window               = var.backup_window
-  max_allocated_storage       = var.max_allocated_storage
-  monitoring_interval         = var.monitoring_interval
-  monitoring_role_arn         = var.monitoring_role_arn
-  monitoring_role_name        = var.monitoring_role_name
-  monitoring_role_description = var.monitoring_role_description
-  create_monitoring_role      = var.create_monitoring_role
+  replicate_source_db             = var.replicate_source_db
+  replica_mode                    = var.replica_mode
+  backup_retention_period         = var.backup_retention_period
+  backup_window                   = var.backup_window
+  max_allocated_storage           = var.max_allocated_storage
+  monitoring_interval             = var.monitoring_interval
+  monitoring_role_arn             = var.monitoring_role_arn
+  monitoring_role_name            = var.monitoring_role_name
+  monitoring_role_use_name_prefix = var.monitoring_role_use_name_prefix
+  monitoring_role_description     = var.monitoring_role_description
+  create_monitoring_role          = var.create_monitoring_role
 
   character_set_name = var.character_set_name
   timezone           = var.timezone

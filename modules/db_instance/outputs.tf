@@ -28,6 +28,16 @@ output "db_instance_endpoint" {
   value       = try(aws_db_instance.this[0].endpoint, "")
 }
 
+output "db_instance_engine" {
+  description = "The database engine"
+  value       = try(aws_db_instance.this[0].engine, "")
+}
+
+output "db_instance_engine_version_actual" {
+  description = "The running version of the database"
+  value       = try(aws_db_instance.this[0].engine_version_actual, "")
+}
+
 output "db_instance_hosted_zone_id" {
   description = "The canonical hosted zone ID of the DB instance (to be used in a Route 53 Alias record)"
   value       = try(aws_db_instance.this[0].hosted_zone_id, "")
@@ -50,7 +60,7 @@ output "db_instance_status" {
 
 output "db_instance_name" {
   description = "The database name"
-  value       = try(aws_db_instance.this[0].name, "")
+  value       = try(aws_db_instance.this[0].db_name, "")
 }
 
 output "db_instance_username" {
@@ -79,7 +89,7 @@ output "db_instance_domain_iam_role_name" {
   value       = try(aws_db_instance.this[0].domain_iam_role_name, "")
 }
 
-output "db_instance_master_password" {
+output "db_instance_password" {
   description = "The master password"
   value       = try(aws_db_instance.this[0].password, "")
   sensitive   = true
