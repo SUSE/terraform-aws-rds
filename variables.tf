@@ -9,9 +9,15 @@ variable "instance_use_identifier_prefix" {
   default     = false
 }
 
+variable "custom_iam_instance_profile" {
+  description = "RDS custom iam instance profile"
+  type        = string
+  default     = null
+}
+
 variable "allocated_storage" {
   description = "The allocated storage in gigabytes"
-  type        = string
+  type        = number
   default     = null
 }
 
@@ -69,8 +75,32 @@ variable "domain" {
   default     = null
 }
 
+variable "domain_auth_secret_arn" {
+  description = "(Optional, but required if domain_fqdn is provided) The ARN for the Secrets Manager secret with the self managed Active Directory credentials for the user joining the domain. Conflicts with domain and domain_iam_role_name."
+  type        = string
+  default     = null
+}
+
+variable "domain_dns_ips" {
+  description = "(Optional, but required if domain_fqdn is provided) The IPv4 DNS IP addresses of your primary and secondary self managed Active Directory domain controllers. Two IP addresses must be provided. If there isn't a secondary domain controller, use the IP address of the primary domain controller for both entries in the list. Conflicts with domain and domain_iam_role_name."
+  type        = list(string)
+  default     = null
+}
+
+variable "domain_fqdn" {
+  description = "The fully qualified domain name (FQDN) of the self managed Active Directory domain. Conflicts with domain and domain_iam_role_name."
+  type        = string
+  default     = null
+}
+
 variable "domain_iam_role_name" {
   description = "(Required if domain is provided) The name of the IAM role to be used when making API calls to the Directory Service"
+  type        = string
+  default     = null
+}
+
+variable "domain_ou" {
+  description = "(Optional, but required if domain_fqdn is provided) The self managed Active Directory organizational unit for your DB instance to join. Conflicts with domain and domain_iam_role_name."
   type        = string
   default     = null
 }
@@ -132,11 +162,26 @@ variable "username" {
 variable "password" {
   description = <<EOF
   Password for the master DB user. Note that this may show up in logs, and it will be stored in the state file.
-  The password provided will not be used if the variable create_random_password is set to true.
+  The password provided will not be used if `manage_master_user_password` is set to true.
   EOF
   type        = string
   default     = null
   sensitive   = true
+}
+
+variable "manage_master_user_password" {
+  description = "Set to true to allow RDS to manage the master user password in Secrets Manager"
+  type        = bool
+  default     = true
+}
+
+variable "master_user_secret_kms_key_id" {
+  description = <<EOF
+  The key ARN, key ID, alias ARN or alias name for the KMS key to encrypt the master user password secret in Secrets Manager.
+  If not specified, the default KMS key for your Amazon Web Services account is used.
+  EOF
+  type        = string
+  default     = null
 }
 
 variable "port" {
@@ -211,6 +256,12 @@ variable "create_monitoring_role" {
   default     = false
 }
 
+variable "monitoring_role_permissions_boundary" {
+  description = "ARN of the policy that is used to set the permissions boundary for the monitoring IAM role"
+  type        = string
+  default     = null
+}
+
 variable "allow_major_version_upgrade" {
   description = "Indicates that major version upgrades are allowed. Changing this parameter does not result in an outage and the change is asynchronously applied as soon as possible"
   type        = bool
@@ -235,6 +286,12 @@ variable "maintenance_window" {
   default     = null
 }
 
+variable "blue_green_update" {
+  description = "Enables low-downtime updates using RDS Blue/Green deployments."
+  type        = map(string)
+  default     = {}
+}
+
 variable "backup_retention_period" {
   description = "The days to retain backups for"
   type        = number
@@ -257,6 +314,12 @@ variable "s3_import" {
   description = "Restore from a Percona Xtrabackup in S3 (only MySQL is supported)"
   type        = map(string)
   default     = null
+}
+
+variable "dedicated_log_volume" {
+  description = "Use a dedicated log volume (DLV) for the DB instance. Requires Provisioned IOPS."
+  type        = bool
+  default     = false
 }
 
 variable "tags" {
@@ -412,6 +475,12 @@ variable "character_set_name" {
   default     = null
 }
 
+variable "nchar_character_set_name" {
+  description = "The national character set is used in the NCHAR, NVARCHAR2, and NCLOB data types for Oracle instances. This can't be changed."
+  type        = string
+  default     = null
+}
+
 variable "enabled_cloudwatch_logs_exports" {
   description = "List of log types to enable for exporting to CloudWatch logs. If omitted, no logs will be exported. Valid values (depending on engine): alert, audit, error, general, listener, slowquery, trace, postgresql (PostgreSQL), upgrade (PostgreSQL)"
   type        = list(string)
@@ -472,18 +541,6 @@ variable "delete_automated_backups" {
   default     = true
 }
 
-variable "create_random_password" {
-  description = "Whether to create random password for RDS primary cluster"
-  type        = bool
-  default     = true
-}
-
-variable "random_password_length" {
-  description = "Length of random password to create"
-  type        = number
-  default     = 16
-}
-
 variable "network_type" {
   description = "The type of network stack to use"
   type        = string
@@ -516,4 +573,48 @@ variable "putin_khuylo" {
   description = "Do you agree that Putin doesn't respect Ukrainian sovereignty and territorial integrity? More info: https://en.wikipedia.org/wiki/Putin_khuylo!"
   type        = bool
   default     = true
+}
+
+################################################################################
+# DB Instance Role Association
+################################################################################
+
+variable "db_instance_role_associations" {
+  description = "A map of DB instance supported feature name to role association ARNs."
+  type        = map(any)
+  default     = {}
+}
+
+################################################################################
+# Managed Secret Rotation
+################################################################################
+
+variable "manage_master_user_password_rotation" {
+  description = "Whether to manage the master user password rotation. By default, false on creation, rotation is managed by RDS. Setting this value to false after previously having been set to true will disable automatic rotation."
+  type        = bool
+  default     = false
+}
+
+variable "master_user_password_rotate_immediately" {
+  description = "Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window."
+  type        = bool
+  default     = null
+}
+
+variable "master_user_password_rotation_automatically_after_days" {
+  description = "Specifies the number of days between automatic scheduled rotations of the secret. Either automatically_after_days or schedule_expression must be specified."
+  type        = number
+  default     = null
+}
+
+variable "master_user_password_rotation_duration" {
+  description = "The length of the rotation window in hours. For example, 3h for a three hour window."
+  type        = string
+  default     = null
+}
+
+variable "master_user_password_rotation_schedule_expression" {
+  description = "A cron() or rate() expression that defines the schedule for rotating your secret. Either automatically_after_days or schedule_expression must be specified."
+  type        = string
+  default     = null
 }

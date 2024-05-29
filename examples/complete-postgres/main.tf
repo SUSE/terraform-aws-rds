@@ -46,6 +46,17 @@ module "db" {
   username = "complete_postgresql"
   port     = 5432
 
+  # Setting manage_master_user_password_rotation to false after it
+  # has previously been set to true disables automatic rotation
+  # however using an initial value of false (default) does not disable
+  # automatic rotation and rotation will be handled by RDS.
+  # manage_master_user_password_rotation allows users to configure
+  # a non-default schedule and is not meant to disable rotation
+  # when initially creating / enabling the password management feature
+  manage_master_user_password_rotation              = true
+  master_user_password_rotate_immediately           = false
+  master_user_password_rotation_schedule_expression = "rate(15 days)"
+
   multi_az               = true
   db_subnet_group_name   = module.vpc.database_subnet_group
   vpc_security_group_ids = [module.security_group.security_group_id]
@@ -176,7 +187,7 @@ module "db_automated_backups_replication" {
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 3.0"
+  version = "~> 5.0"
 
   name = local.name
   cidr = local.vpc_cidr
@@ -193,7 +204,7 @@ module "vpc" {
 
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 4.0"
+  version = "~> 5.0"
 
   name        = local.name
   description = "Complete PostgreSQL example security group"

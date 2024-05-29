@@ -8,6 +8,11 @@ variable "identifier" {
   description = "The name of the RDS instance"
   type        = string
 }
+variable "custom_iam_instance_profile" {
+  description = "RDS custom iam instance profile"
+  type        = string
+  default     = null
+}
 
 variable "use_identifier_prefix" {
   description = "Determines whether to use `identifier` as is or create a unique identifier beginning with `identifier` as the specified prefix"
@@ -17,7 +22,7 @@ variable "use_identifier_prefix" {
 
 variable "allocated_storage" {
   description = "The allocated storage in gigabytes"
-  type        = string
+  type        = number
   default     = null
 }
 
@@ -75,8 +80,32 @@ variable "domain" {
   default     = null
 }
 
+variable "domain_auth_secret_arn" {
+  description = "(Optional, but required if domain_fqdn is provided) The ARN for the Secrets Manager secret with the self managed Active Directory credentials for the user joining the domain. Conflicts with domain and domain_iam_role_name."
+  type        = string
+  default     = null
+}
+
+variable "domain_dns_ips" {
+  description = "(Optional, but required if domain_fqdn is provided) The IPv4 DNS IP addresses of your primary and secondary self managed Active Directory domain controllers. Two IP addresses must be provided. If there isn't a secondary domain controller, use the IP address of the primary domain controller for both entries in the list. Conflicts with domain and domain_iam_role_name."
+  type        = list(string)
+  default     = null
+}
+
+variable "domain_fqdn" {
+  description = "The fully qualified domain name (FQDN) of the self managed Active Directory domain. Conflicts with domain and domain_iam_role_name."
+  type        = string
+  default     = null
+}
+
 variable "domain_iam_role_name" {
   description = "(Required if domain is provided) The name of the IAM role to be used when making API calls to the Directory Service"
+  type        = string
+  default     = null
+}
+
+variable "domain_ou" {
+  description = "(Optional, but required if domain_fqdn is provided) The self managed Active Directory organizational unit for your DB instance to join. Conflicts with domain and domain_iam_role_name."
   type        = string
   default     = null
 }
@@ -113,6 +142,21 @@ variable "username" {
 
 variable "password" {
   description = "Password for the master DB user. Note that this may show up in logs, and it will be stored in the state file"
+  type        = string
+  default     = null
+}
+
+variable "manage_master_user_password" {
+  description = "Set to true to allow RDS to manage the master user password in Secrets Manager. Cannot be set if password is provided"
+  type        = bool
+  default     = true
+}
+
+variable "master_user_secret_kms_key_id" {
+  description = <<EOF
+  The key ARN, key ID, alias ARN or alias name for the KMS key to encrypt the master user password secret in Secrets Manager.
+  If not specified, the default KMS key for your Amazon Web Services account is used.
+  EOF
   type        = string
   default     = null
 }
@@ -219,6 +263,12 @@ variable "monitoring_role_description" {
   default     = null
 }
 
+variable "monitoring_role_permissions_boundary" {
+  description = "ARN of the policy that is used to set the permissions boundary for the monitoring IAM role"
+  type        = string
+  default     = null
+}
+
 variable "create_monitoring_role" {
   description = "Create IAM role with a defined name that permits RDS to send enhanced monitoring metrics to CloudWatch Logs."
   type        = bool
@@ -249,6 +299,12 @@ variable "maintenance_window" {
   default     = null
 }
 
+variable "blue_green_update" {
+  description = "Enables low-downtime updates using RDS Blue/Green deployments."
+  type        = map(string)
+  default     = {}
+}
+
 variable "backup_retention_period" {
   description = "The days to retain backups for"
   type        = number
@@ -267,6 +323,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "db_instance_tags" {
+  description = "A map of additional tags for the DB instance"
+  type        = map(string)
+  default     = {}
+}
+
 variable "option_group_name" {
   description = "Name of the DB option group to associate."
   type        = string
@@ -281,6 +343,12 @@ variable "timezone" {
 
 variable "character_set_name" {
   description = "The character set name to use for DB encoding in Oracle instances. This can't be changed. See Oracle Character Sets Supported in Amazon RDS and Collations and Character Sets for Microsoft SQL Server for more information. This can only be set on creation."
+  type        = string
+  default     = null
+}
+
+variable "nchar_character_set_name" {
+  description = "The national character set is used in the NCHAR, NVARCHAR2, and NCLOB data types for Oracle instances. This can't be changed."
   type        = string
   default     = null
 }
@@ -358,6 +426,12 @@ variable "network_type" {
   default     = null
 }
 
+variable "dedicated_log_volume" {
+  description = "Use a dedicated log volume (DLV) for the DB instance. Requires Provisioned IOPS."
+  type        = bool
+  default     = false
+}
+
 ################################################################################
 # CloudWatch Log Group
 ################################################################################
@@ -376,6 +450,40 @@ variable "cloudwatch_log_group_retention_in_days" {
 
 variable "cloudwatch_log_group_kms_key_id" {
   description = "The ARN of the KMS Key to use when encrypting log data"
+  type        = string
+  default     = null
+}
+
+################################################################################
+# Managed Secret Rotation
+################################################################################
+
+variable "manage_master_user_password_rotation" {
+  description = "Whether to manage the master user password rotation. By default, false on creation, rotation is managed by RDS. Setting this value to false after previously having been set to true will disable automatic rotation."
+  type        = bool
+  default     = false
+}
+
+variable "master_user_password_rotate_immediately" {
+  description = "Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window."
+  type        = bool
+  default     = null
+}
+
+variable "master_user_password_rotation_automatically_after_days" {
+  description = "Specifies the number of days between automatic scheduled rotations of the secret. Either automatically_after_days or schedule_expression must be specified."
+  type        = number
+  default     = null
+}
+
+variable "master_user_password_rotation_duration" {
+  description = "The length of the rotation window in hours. For example, 3h for a three hour window."
+  type        = string
+  default     = null
+}
+
+variable "master_user_password_rotation_schedule_expression" {
+  description = "A cron() or rate() expression that defines the schedule for rotating your secret. Either automatically_after_days or schedule_expression must be specified."
   type        = string
   default     = null
 }

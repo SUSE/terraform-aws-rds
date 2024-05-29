@@ -33,9 +33,9 @@ output "db_instance_hosted_zone_id" {
   value       = module.db.db_instance_hosted_zone_id
 }
 
-output "db_instance_id" {
-  description = "The RDS instance ID"
-  value       = module.db.db_instance_id
+output "db_instance_identifier" {
+  description = "The RDS instance identifier"
+  value       = module.db.db_instance_identifier
 }
 
 output "db_instance_resource_id" {
@@ -56,12 +56,6 @@ output "db_instance_name" {
 output "db_instance_username" {
   description = "The master username for the database"
   value       = module.db.db_instance_username
-  sensitive   = true
-}
-
-output "db_instance_password" {
-  description = "The database password (this password may be old, because Terraform doesn't track it after initial creation)"
-  value       = module.db.db_instance_password
   sensitive   = true
 }
 
@@ -100,6 +94,16 @@ output "db_instance_cloudwatch_log_groups" {
   value       = module.db.db_instance_cloudwatch_log_groups
 }
 
+output "db_instance_master_user_secret_arn" {
+  description = "The ARN of the master user secret (Only available when manage_master_user_password is set to true)"
+  value       = module.db.db_instance_master_user_secret_arn
+}
+
+output "db_instance_secretsmanager_secret_rotation_enabled" {
+  description = "Specifies whether automatic rotation is enabled for the secret"
+  value       = module.db.db_instance_secretsmanager_secret_rotation_enabled
+}
+
 # Default
 output "db_default_instance_address" {
   description = "The address of the RDS instance"
@@ -136,9 +140,9 @@ output "db_default_instance_hosted_zone_id" {
   value       = module.db_default.db_instance_hosted_zone_id
 }
 
-output "db_default_instance_id" {
-  description = "The RDS instance ID"
-  value       = module.db_default.db_instance_id
+output "db_default_instance_identifier" {
+  description = "The RDS instance identifier"
+  value       = module.db_default.db_instance_identifier
 }
 
 output "db_default_instance_resource_id" {
@@ -159,12 +163,6 @@ output "db_default_instance_name" {
 output "db_default_instance_username" {
   description = "The master username for the database"
   value       = module.db_default.db_instance_username
-  sensitive   = true
-}
-
-output "db_default_instance_password" {
-  description = "The database password (this password may be old, because Terraform doesn't track it after initial creation)"
-  value       = module.db_default.db_instance_password
   sensitive   = true
 }
 
@@ -196,4 +194,14 @@ output "db_default_parameter_group_arn" {
 output "db_default_instance_cloudwatch_log_groups" {
   description = "Map of CloudWatch log groups created and their attributes"
   value       = module.db_default.db_instance_cloudwatch_log_groups
+}
+
+output "db_default_master_user_secret_arn" {
+  description = "The ARN of the master user secret (Only available when manage_master_user_password is set to true)"
+  value       = module.db_default.db_instance_master_user_secret_arn
+}
+
+output "db_default_secretsmanager_secret_rotation_enabled" {
+  description = "Specifies whether automatic rotation is enabled for the secret"
+  value       = module.db_default.db_instance_secretsmanager_secret_rotation_enabled
 }

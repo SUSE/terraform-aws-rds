@@ -10,10 +10,7 @@ locals {
   monitoring_role_name_prefix = var.monitoring_role_use_name_prefix ? "${var.monitoring_role_name}-" : null
 
   # Replicas will use source metadata
-  username       = var.replicate_source_db != null ? null : var.username
-  password       = var.replicate_source_db != null ? null : var.password
-  engine         = var.replicate_source_db != null ? null : var.engine
-  engine_version = var.replicate_source_db != null ? null : var.engine_version
+  is_replica = var.replicate_source_db != null
 }
 
 # Ref. https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#genref-aws-service-namespaces
@@ -35,8 +32,8 @@ resource "aws_db_instance" "this" {
   identifier        = local.identifier
   identifier_prefix = local.identifier_prefix
 
-  engine            = local.engine
-  engine_version    = local.engine_version
+  engine            = local.is_replica ? null : var.engine
+  engine_version    = var.engine_version
   instance_class    = var.instance_class
   allocated_storage = var.allocated_storage
   storage_type      = var.storage_type
@@ -45,12 +42,19 @@ resource "aws_db_instance" "this" {
   license_model     = var.license_model
 
   db_name                             = var.db_name
-  username                            = local.username
-  password                            = local.password
+  username                            = !local.is_replica ? var.username : null
+  password                            = !local.is_replica && var.manage_master_user_password ? null : var.password
   port                                = var.port
   domain                              = var.domain
+  domain_auth_secret_arn              = var.domain_auth_secret_arn
+  domain_dns_ips                      = var.domain_dns_ips
+  domain_fqdn                         = var.domain_fqdn
   domain_iam_role_name                = var.domain_iam_role_name
+  domain_ou                           = var.domain_ou
   iam_database_authentication_enabled = var.iam_database_authentication_enabled
+  custom_iam_instance_profile         = var.custom_iam_instance_profile
+  manage_master_user_password         = !local.is_replica && var.manage_master_user_password ? var.manage_master_user_password : null
+  master_user_secret_kms_key_id       = !local.is_replica && var.manage_master_user_password ? var.master_user_secret_kms_key_id : null
 
   vpc_security_group_ids = var.vpc_security_group_ids
   db_subnet_group_name   = var.db_subnet_group_name
@@ -58,17 +62,27 @@ resource "aws_db_instance" "this" {
   option_group_name      = var.option_group_name
   network_type           = var.network_type
 
-  availability_zone   = var.availability_zone
-  multi_az            = var.multi_az
-  iops                = var.iops
-  storage_throughput  = var.storage_throughput
-  publicly_accessible = var.publicly_accessible
-  ca_cert_identifier  = var.ca_cert_identifier
+  availability_zone    = var.availability_zone
+  multi_az             = var.multi_az
+  iops                 = var.iops
+  storage_throughput   = var.storage_throughput
+  publicly_accessible  = var.publicly_accessible
+  ca_cert_identifier   = var.ca_cert_identifier
+  dedicated_log_volume = var.dedicated_log_volume
 
   allow_major_version_upgrade = var.allow_major_version_upgrade
   auto_minor_version_upgrade  = var.auto_minor_version_upgrade
   apply_immediately           = var.apply_immediately
   maintenance_window          = var.maintenance_window
+
+  # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/blue-green-deployments.html
+  dynamic "blue_green_update" {
+    for_each = length(var.blue_green_update) > 0 ? [var.blue_green_update] : []
+
+    content {
+      enabled = try(blue_green_update.value.enabled, null)
+    }
+  }
 
   snapshot_identifier       = var.snapshot_identifier
   copy_tags_to_snapshot     = var.copy_tags_to_snapshot
@@ -81,13 +95,14 @@ resource "aws_db_instance" "this" {
 
   replicate_source_db     = var.replicate_source_db
   replica_mode            = var.replica_mode
-  backup_retention_period = var.backup_retention_period
+  backup_retention_period = length(var.blue_green_update) > 0 ? coalesce(var.backup_retention_period, 1) : var.backup_retention_period
   backup_window           = var.backup_window
   max_allocated_storage   = var.max_allocated_storage
   monitoring_interval     = var.monitoring_interval
   monitoring_role_arn     = var.monitoring_interval > 0 ? local.monitoring_role_arn : null
 
   character_set_name              = var.character_set_name
+  nchar_character_set_name        = var.nchar_character_set_name
   timezone                        = var.timezone
   enabled_cloudwatch_logs_exports = var.enabled_cloudwatch_logs_exports
 
@@ -118,7 +133,7 @@ resource "aws_db_instance" "this" {
     }
   }
 
-  tags = var.tags
+  tags = merge(var.tags, var.db_instance_tags)
 
   depends_on = [aws_cloudwatch_log_group.this]
 
@@ -127,14 +142,18 @@ resource "aws_db_instance" "this" {
     delete = lookup(var.timeouts, "delete", null)
     update = lookup(var.timeouts, "update", null)
   }
+
+  # Note: do not add `latest_restorable_time` to `ignore_changes`
+  # https://github.com/terraform-aws-modules/terraform-aws-rds/issues/478
 }
 
 ################################################################################
 # CloudWatch Log Group
 ################################################################################
 
+# Log groups will not be created if using an identifier prefix
 resource "aws_cloudwatch_log_group" "this" {
-  for_each = toset([for log in var.enabled_cloudwatch_logs_exports : log if var.create && var.create_cloudwatch_log_group])
+  for_each = toset([for log in var.enabled_cloudwatch_logs_exports : log if var.create && var.create_cloudwatch_log_group && !var.use_identifier_prefix])
 
   name              = "/aws/rds/instance/${var.identifier}/${each.value}"
   retention_in_days = var.cloudwatch_log_group_retention_in_days
@@ -163,10 +182,11 @@ data "aws_iam_policy_document" "enhanced_monitoring" {
 resource "aws_iam_role" "enhanced_monitoring" {
   count = var.create_monitoring_role ? 1 : 0
 
-  name               = local.monitoring_role_name
-  name_prefix        = local.monitoring_role_name_prefix
-  assume_role_policy = data.aws_iam_policy_document.enhanced_monitoring.json
-  description        = var.monitoring_role_description
+  name                 = local.monitoring_role_name
+  name_prefix          = local.monitoring_role_name_prefix
+  assume_role_policy   = data.aws_iam_policy_document.enhanced_monitoring.json
+  description          = var.monitoring_role_description
+  permissions_boundary = var.monitoring_role_permissions_boundary
 
   tags = merge(
     {
@@ -181,4 +201,21 @@ resource "aws_iam_role_policy_attachment" "enhanced_monitoring" {
 
   role       = aws_iam_role.enhanced_monitoring[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
+################################################################################
+# Managed Secret Rotation
+################################################################################
+
+resource "aws_secretsmanager_secret_rotation" "this" {
+  count = var.create && var.manage_master_user_password && var.manage_master_user_password_rotation ? 1 : 0
+
+  secret_id          = aws_db_instance.this[0].master_user_secret[0].secret_arn
+  rotate_immediately = var.master_user_password_rotate_immediately
+
+  rotation_rules {
+    automatically_after_days = var.master_user_password_rotation_automatically_after_days
+    duration                 = var.master_user_password_rotation_duration
+    schedule_expression      = var.master_user_password_rotation_schedule_expression
+  }
 }
